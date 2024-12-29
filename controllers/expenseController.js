@@ -70,7 +70,7 @@ const expenseController = {
             }
         } catch (error) {
             await t.rollback()
-            res.staus(400).send({ message: "Error while deleting the expense" })
+            res.status(400).send({ message: "Error while deleting the expense" })
         }
     }
 

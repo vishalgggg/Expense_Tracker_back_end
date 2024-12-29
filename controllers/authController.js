@@ -100,7 +100,7 @@ const authController = {
                 const transEmailApi = new sib.TransactionalEmailsApi();
 
                 // sender and receivers
-                const sender = { email: "admin@budgetbuddy.com" };
+                const sender = { email: "vsoftjob184@gmail.com" };
                 const receivers = [{ email }];
                 const uniqueString = uuidv4()
                 await forgotPwdModel.create({ isActive: true, id: uniqueString, userId: id })
@@ -108,7 +108,7 @@ const authController = {
                     sender,
                     to: receivers,
                     subject: "Forgot Password From BudgetBuddy",
-                    htmlContent: `<a href= /auth/showforgotpasswordform/${uniqueString}>Update Password</a>`
+                    htmlContent: `<a href= http://localhost:4000/auth/showforgotpasswordform/${uniqueString}>Update Password</a>`
                 });
                 res.status(200).json({ message: 'Password reset email sent successfully.' });
             }
