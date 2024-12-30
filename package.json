@@ -13,6 +13,7 @@
     "@aws-sdk/client-dynamodb": "^3.490.0",
     "aws": "^0.0.3-2",
     "aws-sdk": "^2.1534.0",
+    "axios": "^1.7.9",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.2",
     "cashfree-sdk": "^0.1.1",

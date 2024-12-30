@@ -16,32 +16,39 @@ const paymentController = {
                 order_currency: 'INR',
                 order_note: 'Premium subscription',
                 customer_details: {
-                    customer_id: id,
-                    customer_email: req.user.email,
-                    customer_phone: req.user.phone
+                    customer_id: id.toString(), // Ensure this is a string
+                    customer_email: req.user.userEmail,
+                    customer_phone: req.user.userPhone
                 },
                 order_meta: {
                     return_url: 'https://your-return-url.com', // Set your return URL here
                     notify_url: 'https://your-notify-url.com' // Set your notify URL here
                 }
             };
-
+            console.log("Order data being sent to Cashfree: ", order);
             const response = await axios.post('https://sandbox.cashfree.com/pg/orders', order, {
                 headers: {
                     'Content-Type': 'application/json',
                     'x-client-id': process.env.CF_CLIENT_ID,
-                    'x-client-secret': process.env.CF_CLIENT_SECRET
+                    'x-client-secret': process.env.CF_CLIENT_SECRET,
+                    'x-api-version':'2025-01-01'
                 }
             });
-
+            console.log("Response from Cashfree API: ", response.data);
             const orderResponse = response.data;
-
+            if (!orderResponse.cf_order_id || !orderResponse.payment_session_id)
+            { throw new Error(`Order creation failed with message: ${orderResponse.message}`); }          
+            const { cf_order_id, payment_session_id } = orderResponse;
             await orderModel.create({ orderId: orderId, status: 'pending', userId: id });
-            res.send({ order: orderResponse, app_id: process.env.CF_CLIENT_ID, order_token: orderResponse.order_token });
+            res.send({ order: orderResponse, app_id: process.env.CF_CLIENT_ID, order_token: payment_session_id });
 
         } catch (error) {
-            console.log(error);
-            res.status(400).send({ message: 'some error', error: error.message });
+            if (error.response) { 
+                console.error("Error creating order:", error.response.data);
+                res.status(400).send({ message: 'some error', error: error.response.data }); } 
+            else { 
+                console.error("Error creating order:", error.message);
+                res.status(400).send({ message: 'some error', error: error.message }); }
         }
     },
 
