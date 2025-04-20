@@ -1,7 +1,13 @@
 const sequelize = require('../util/database');
-const axios = require('axios');
+
 const orderModel = require('../models/orderModel');
+const paymentService = require("../services/paymentService")
 require('dotenv').config();
+const {Cashfree} = require('cashfree-pg');
+Cashfree.XClientId = process.env.CF_CLIENT_ID;
+Cashfree.XClientSecret = process.env.CF_CLIENT_SECRET;
+Cashfree.XEnvironment = Cashfree.Environment.SANDBOX;
+
 
 const paymentController = {
     buyPremium: async (req, res) => {
@@ -9,7 +15,8 @@ const paymentController = {
         try {
             const amount = 2500;
             const orderId = `ORDER_${Date.now()}`;
-
+            const expiryDate = new Date(Date.now() +  60 * 60 * 1000); // 1 hour from now
+            const formattedExpiryDate = expiryDate.toISOString();
             const order = {
                 order_id: orderId,
                 order_amount: amount,
@@ -21,65 +28,63 @@ const paymentController = {
                     customer_phone: req.user.userPhone
                 },
                 order_meta: {
-                    return_url: 'https://your-return-url.com', // Set your return URL here
-                    notify_url: 'https://your-notify-url.com' // Set your notify URL here
-                }
+                    return_url: `http://localhost:4000/payment/updatepremiumstatus/${orderId}`, // Set your return URL here
+                    payment_methods: "ccc, upi, nb"
+                    
+                },
+                order_expiry_time : formattedExpiryDate
             };
-            console.log("Order data being sent to Cashfree: ", order);
-            const response = await axios.post('https://sandbox.cashfree.com/pg/orders', order, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-client-id': process.env.CF_CLIENT_ID,
-                    'x-client-secret': process.env.CF_CLIENT_SECRET,
-                    'x-api-version':'2025-01-01'
-                }
-            });
-            console.log("Response from Cashfree API: ", response.data);
-            const orderResponse = response.data;
-            if (!orderResponse.cf_order_id || !orderResponse.payment_session_id)
-            { throw new Error(`Order creation failed with message: ${orderResponse.message}`); }          
-            const { cf_order_id, payment_session_id } = orderResponse;
+            // console.log("Order data being sent to Cashfree: ", order);
+            const response = await Cashfree.PGCreateOrder("2025-01-01", order);
+            // console.log("Response from Cashfree API: ", response.data);
+            
             await orderModel.create({ orderId: orderId, status: 'pending', userId: id });
-            res.send({ order: orderResponse, app_id: process.env.CF_CLIENT_ID, order_token: payment_session_id });
+            res.send({ order_token: response.data.payment_session_id, order_id: orderId });
 
         } catch (error) {
-            if (error.response) { 
-                console.error("Error creating order:", error.response.data);
-                res.status(400).send({ message: 'some error', error: error.response.data }); } 
-            else { 
-                console.error("Error creating order:", error.message);
-                res.status(400).send({ message: 'some error', error: error.message }); }
+            console.error("Error creating order: ", error.message);
+            res.status(400).send({ message: 'some error', error: error.message }); 
+       
         }
     },
 
     updatePremiumStatus: async (req, res) => {
-        let t;
         try {
-            t = await sequelize.transaction();
-            const { order_id, payment_id } = req.body;
-            const findedorder = await orderModel.findOne({ where: { orderId: order_id } });
-            await Promise.all([
-                findedorder.update({ paymentId: payment_id, status: 'success' }, { transaction: t }),
-                req.user.update({ isPremiumUser: true }, { transaction: t })
-            ]);
-            await t.commit();
-            res.send({ success: true });
-        } catch (error) {
-            await t.rollback();
-            res.status(400).send({ message: 'some error', error: error.message });
+        let order_id= req.params;
+        let orderStatus = await paymentService(order_id,Cashfree)
+        
+        const findedorder = await orderModel.findOne({ where: { orderId: order_id.orderId } });
+        if (!findedorder) {
+            console.log("Order not found!");
+            return res.status(404).send({ status: false, message: 'Order not found' });
         }
-    },
-
-    updateStausToFailed: async (req, res) => {
-        try {
-            const { order_id } = req.body;
-            const findedorder = await orderModel.findOne({ where: { orderId: order_id } });
+        if(orderStatus === "Success"){
+            await findedorder.update({  status: 'success' });
+            await req.user.update({ isPremiumUser: true }) ;
+            res.send({ status: true });
+            } 
+        
+        else if(orderStatus === "Pending"){
+                await findedorder.update({ status: 'PENDING' });
+                res.status(400).send({ status: false, message: 'Payment pending' });
+            
+        }
+        else{
             await findedorder.update({ status: 'failed' });
-            res.status(400).send({ success: false, message: 'Payment failed' });
-        } catch (error) {
-            res.status(400).send({ message: 'some error', error: error.message });
+            res.status(400).send({ status: false, message: 'Payment failed' });
+            
         }
+
     }
+    catch (error) {
+        res.status(400).send({ message: 'some error', error: error.message });
+    }
+        
+    },
+    getPremiumStatus:async (req, res) =>{
+        res.send({isPremiumUser: req.user.isPremiumUser});
+    }
+   
 };
 
 module.exports = paymentController;

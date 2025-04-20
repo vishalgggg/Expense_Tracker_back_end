@@ -27,7 +27,8 @@ const userModel = sequelize.define('users', {
 
     },
     totalTransaction: {
-        type: Sequelize.STRING
+        type: Sequelize.INTEGER,
+        defaultValue: 0,
     },
 
     isPremiumUser: Sequelize.BOOLEAN
